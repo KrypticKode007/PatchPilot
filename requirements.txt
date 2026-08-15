@@ -1,0 +1,30 @@
+# PatchPilot — Audio Mastering API
+# Python dependencies
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# System dependencies (not pip-installable):
+#   sudo apt install libsndfile1 ffmpeg        # Debian/Ubuntu
+#   brew install libsndfile ffmpeg             # macOS
+#   pkg install libsndfile ffmpeg              # Termux (Android)
+
+# --- Core framework ---
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.30.0,<1.0.0
+
+# --- Validation ---
+pydantic>=2.9.0,<3.0.0
+
+# --- Multipart file upload support ---
+python-multipart>=0.0.12
+
+# --- Audio processing ---
+# Matchering 2.0 — open-source audio matching/mastering library.
+# Requires libsndfile (system package) for soundfile to work.
+matchering>=2.0.6
+soundfile>=0.12.0
+
+# --- Optional: matchering-cli (for subprocess mode) ---
+# Install separately from https://github.com/sergree/matchering-cli
+# if you want to use mode=subprocess instead of mode=direct.

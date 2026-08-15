@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax validation
+        run: |
+          python -m py_compile patchpilot.py
+          python -c "import ast; ast.parse(open('patchpilot.py').read()); print('ast.parse: OK')"
+
+      - name: Check for duplicate definitions
+        run: |
+          python -c "
+          import ast, sys
+          tree = ast.parse(open('patchpilot.py').read())
+          names = []
+          for node in ast.walk(tree):
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                  names.append(node.name)
+          dupes = set(n for n in names if names.count(n) > 1)
+          if dupes:
+              print(f'DUPLICATE DEFINITIONS: {dupes}', file=sys.stderr)
+              sys.exit(1)
+          print(f'No duplicates ({len(names)} definitions)')
+          "
+
+      - name: Module import test
+        run: |
+          python -c "
+          import patchpilot
+          routes = [r.path for r in patchpilot.app.routes if hasattr(r, 'path')]
+          print(f'Module imported OK — {len(routes)} routes')
+          assert len(routes) >= 7, 'Expected at least 7 routes'
+          "
+
+      - name: Functional endpoint tests
+        run: |
+          python -c "
+          from fastapi.testclient import TestClient
+          import patchpilot
+
+          with TestClient(patchpilot.app) as client:
+              assert client.get('/').status_code == 200
+              assert client.get('/health').status_code == 200
+              assert client.get('/jobs').status_code == 200
+              assert client.get('/jobs/nonexistent').status_code == 404
+              assert client.delete('/jobs/nonexistent').status_code == 404
+              assert client.get('/jobs/nonexistent/download').status_code == 404
+
+              # Invalid file extension
+              import io
+              files = {
+                  'target_file': ('test.txt', io.BytesIO(b'fake'), 'text/plain'),
+                  'reference_file': ('ref.wav', io.BytesIO(b'fake'), 'audio/wav'),
+              }
+              assert client.post('/jobs', files=files).status_code == 415
+
+              # Invalid bit depth
+              files = {
+                  'target_file': ('test.wav', io.BytesIO(b'fake'), 'audio/wav'),
+                  'reference_file': ('ref.wav', io.BytesIO(b'fake'), 'audio/wav'),
+              }
+              data = {'bit_depth': '99'}
+              assert client.post('/jobs', files=files, data=data).status_code == 422
+
+          print('All functional tests passed')
+          "
