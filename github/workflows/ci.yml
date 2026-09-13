@@ -1,0 +1,68 @@
+name: PatchPilot CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Ensure testing and formatting tools are installed
+        pip install pytest pytest-asyncio ruff
+
+    - name: Lint with Ruff
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        ruff check .
+
+    - name: Run asynchronous test suite
+      run: |
+        # Run pytest looking for your worker and core module tests
+        pytest
+
+  generate-build-metadata:
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Generate build artifact metadata
+      run: |
+        mkdir -p build_meta
+        echo "{" > build_meta/metadata.json
+        echo "  \"repository\": \"${{ github.repository }}\"," >> build_meta/metadata.json
+        echo "  \"commit_sha\": \"${{ github.sha }}\"," >> build_meta/metadata.json
+        echo "  \"actor\": \"${{ github.actor }}\"," >> build_meta/metadata.json
+        echo "  \"run_id\": \"${{ github.run_id }}\"," >> build_meta/metadata.json
+        echo "  \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"" >> build_meta/metadata.json
+        echo "}" >> build_meta/metadata.json
+
+    - name: Upload metadata artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: patchpilot-build-metadata
+        path: build_meta/metadata.json
+        retention-days: 90
