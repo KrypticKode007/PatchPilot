@@ -1335,3 +1335,8 @@ if __name__ == "__main__":
         reload=False,
         log_level="info",
     )
+# 1. Clean out the historical broken segment folders
+rm -rf core/ github/ verify_pipeline.py
+
+# 2. Start the verified engine locally
+python patchpilot.py
